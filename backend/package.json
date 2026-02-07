@@ -1,0 +1,38 @@
+{
+  "name": "autodocs-backend",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "openai": "^4.85.0",
+    "@babel/parser": "^7.26.0",
+    "@babel/traverse": "^7.26.0",
+    "@babel/generator": "^7.26.0",
+    "simple-git": "^3.27.0",
+    "fast-glob": "^3.3.3",
+    "graphql-request": "^7.1.0",
+    "graphql": "^16.10.0",
+    "zod": "^3.24.0",
+    "pino": "^9.6.0",
+    "pino-pretty": "^13.0.0",
+    "uuid": "^11.1.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "tsx": "^4.19.0",
+    "@types/express": "^5.0.0",
+    "@types/cors": "^2.8.17",
+    "@types/uuid": "^10.0.0",
+    "@types/babel__traverse": "^7.20.0",
+    "@types/babel__generator": "^7.6.0",
+    "@types/node": "^22.0.0"
+  }
+}

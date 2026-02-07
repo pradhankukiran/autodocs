@@ -1,0 +1,45 @@
+@import "tailwindcss";
+
+@theme {
+  /* ─── Cream palette ─── */
+  --color-cream-50:  #FAF7F2;
+  --color-cream-100: #F3EDE4;
+  --color-cream-200: #EDE7DD;
+  --color-cream-300: #E6DED3;
+  --color-cream-400: #F0EAE0;
+  --color-cream-500: #D6CEC3;
+
+  /* ─── Primary (warm violet) ─── */
+  --color-primary-50:  #F0EDFF;
+  --color-primary-100: #E4DFFE;
+  --color-primary-500: #5746AF;
+  --color-primary-600: #4A3B9B;
+  --color-primary-700: #3D3183;
+
+  /* ─── Semantic ─── */
+  --color-success-500: #0F766E;
+  --color-success-50:  #F0FDF9;
+  --color-error-500:   #DC2626;
+  --color-error-50:    #FEF2F2;
+
+  /* ─── Text ─── */
+  --color-text-primary:   #1C1917;
+  --color-text-secondary: #57534E;
+  --color-text-tertiary:  #A8A29E;
+
+  /* ─── Fonts ─── */
+  --font-display: "Newsreader", Georgia, serif;
+  --font-sans:    "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono:    "JetBrains Mono", ui-monospace, monospace;
+
+  /* ─── Shadows (warm, subtle) ─── */
+  --shadow-card:     0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.02);
+  --shadow-elevated: 0 4px 12px rgba(0, 0, 0, 0.06);
+}
+
+/* ─── Base layer ─── */
+@layer base {
+  body {
+    @apply bg-cream-50 font-sans text-text-primary antialiased;
+  }
+}
