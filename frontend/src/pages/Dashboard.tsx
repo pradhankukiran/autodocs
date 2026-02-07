@@ -76,10 +76,7 @@ export default function Dashboard() {
     <div className="space-y-8">
       {/* Page header */}
       <div>
-        <h2 className="font-display text-2xl font-semibold text-[#1C1917]">
-          Dashboard
-        </h2>
-        <p className="text-sm text-[#57534E] mt-1">
+        <p className="text-sm text-[#57534E]">
           Connect a repository to auto-generate API documentation
         </p>
       </div>
