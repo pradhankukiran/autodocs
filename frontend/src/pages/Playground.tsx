@@ -2,6 +2,12 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { Loader2, AlertCircle, FileText } from 'lucide-react';
 
+const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
+
+function apiUrl(path: string): string {
+  return API_BASE ? `${API_BASE}${path}` : path;
+}
+
 const RENDERER_OPTIONS = [
   { value: 'scalar', label: 'Scalar' },
   { value: 'swagger', label: 'Swagger UI' },
@@ -266,7 +272,7 @@ export default function Playground() {
     setError(null);
     setSpecJson(null);
 
-    fetch(`/api/docs/openapi/${encodeURIComponent(repoId)}`)
+    fetch(apiUrl(`/api/docs/openapi/${encodeURIComponent(repoId)}`))
       .then((res) => {
         if (!res.ok) throw new Error(`Spec not found (HTTP ${res.status})`);
         return res.json();
@@ -476,7 +482,7 @@ export default function Playground() {
               setError(null);
               setSpecJson(null);
               setLoading(true);
-              fetch(`/api/docs/openapi/${encodeURIComponent(repoId!)}`)
+              fetch(apiUrl(`/api/docs/openapi/${encodeURIComponent(repoId!)}`))
                 .then((res) => {
                   if (!res.ok) throw new Error(`Spec not found (HTTP ${res.status})`);
                   return res.json();
