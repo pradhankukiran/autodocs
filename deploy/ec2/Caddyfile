@@ -1,0 +1,7 @@
+{$API_DOMAIN} {
+  reverse_proxy backend:4000
+}
+
+{$WIKI_DOMAIN} {
+  reverse_proxy wiki:3000
+}

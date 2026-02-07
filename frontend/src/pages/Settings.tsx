@@ -2,6 +2,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, AppSettings } from '../lib/api';
 import { CheckCircle2, XCircle, ExternalLink, Palette, Code2, Shield } from 'lucide-react';
 
+const WIKI_BASE_URL = import.meta.env.VITE_WIKI_URL || 'http://localhost:3000';
+
 const RENDERERS: { id: AppSettings['defaultRenderer']; name: string; description: string }[] = [
   { id: 'scalar', name: 'Scalar', description: 'Modern, clean API reference with built-in testing' },
   { id: 'swagger', name: 'Swagger UI', description: 'Industry-standard interactive API explorer' },
@@ -116,7 +118,7 @@ export default function Settings() {
             </>
           )}
           <a
-            href="http://localhost:3000"
+            href={WIKI_BASE_URL}
             target="_blank"
             rel="noopener noreferrer"
             className="ml-auto text-xs text-[#57534E] hover:text-primary-600 flex items-center gap-1 transition-colors"

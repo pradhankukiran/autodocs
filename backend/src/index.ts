@@ -10,7 +10,20 @@ import { fileURLToPath } from 'url';
 
 const app = express();
 
-app.use(cors());
+const corsOptions: cors.CorsOptions = {
+  origin(origin, callback) {
+    // Allow non-browser clients and same-origin requests with no Origin header.
+    if (!origin) return callback(null, true);
+
+    if (config.corsOrigins.length === 0 || config.corsOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+
+    callback(new Error(`CORS blocked for origin: ${origin}`));
+  },
+};
+
+app.use(cors(corsOptions));
 app.use(express.json());
 
 // API routes

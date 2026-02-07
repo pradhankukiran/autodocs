@@ -7,6 +7,8 @@ interface Props {
   renderer?: string;
 }
 
+const WIKI_BASE_URL = import.meta.env.VITE_WIKI_URL || 'http://localhost:3000';
+
 export default function DocStatus({ progress, repoId, renderer }: Props) {
   if (!progress) return null;
 
@@ -54,7 +56,7 @@ export default function DocStatus({ progress, repoId, renderer }: Props) {
         <div className="flex gap-3 mt-4">
           {progress.wikiUrl && (
             <a
-              href={`http://localhost:3000/en/${progress.wikiUrl}`}
+              href={`${WIKI_BASE_URL}/en/${progress.wikiUrl}`}
               target="_blank"
               rel="noopener noreferrer"
               className="bg-[#0F766E] hover:bg-[#0D6560] text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors"

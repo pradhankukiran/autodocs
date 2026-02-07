@@ -4,10 +4,18 @@ import { fileURLToPath } from 'url';
 
 dotenv.config({ path: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../.env') });
 
+function parseCsv(input: string | undefined): string[] {
+  return (input || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
 export const config = {
   port: parseInt(process.env.PORT || '4000', 10),
   wikiUrl: process.env.WIKI_URL || 'http://localhost:3000',
   frontendUrl: process.env.FRONTEND_URL || 'http://localhost:5173',
+  corsOrigins: parseCsv(process.env.CORS_ORIGINS),
   wikiApiToken: process.env.WIKI_API_TOKEN || '',
   reposDir: process.env.REPOS_DIR || path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../repos'),
   providers: {
