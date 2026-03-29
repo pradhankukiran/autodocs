@@ -278,6 +278,20 @@ export async function initializeStorage(): Promise<void> {
   getSqliteDb();
 }
 
+export async function closeStorage(): Promise<void> {
+  if (postgresPool) {
+    await postgresPool.end();
+    postgresPool = null;
+    postgresInitPromise = null;
+    logger.info('Postgres pool closed');
+  }
+  if (sqliteDb) {
+    sqliteDb.close();
+    sqliteDb = null;
+    logger.info('SQLite database closed');
+  }
+}
+
 export async function checkStorageHealth(): Promise<{
   ok: boolean;
   mode: 'sqlite' | 'postgres';
