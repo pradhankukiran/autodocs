@@ -1,35 +1,62 @@
-import { Router, Request, Response } from 'express';
-import { ingestRepo, IngestResult } from '../services/repo-ingester.js';
-import { parseRoutes, ParsedRoute } from '../services/route-parser.js';
+import { Router, Request, Response, NextFunction } from 'express';
+import { ingestRepo } from '../services/repo-ingester.js';
+import { parseRoutes } from '../services/route-parser.js';
+import { insertRepo, getRepo, listRepos } from '../services/db.js';
+import { requireAdminApiKey } from '../middleware/admin-auth.js';
+import { validateBody, ingestRepoSchema } from '../middleware/validation.js';
+import { repoIngestLimiter } from '../middleware/rate-limit.js';
+import { AppError } from '../errors.js';
 import { logger } from '../utils/logger.js';
 
-export const reposRouter = Router();
+type AsyncHandler = (req: Request, res: Response, next: NextFunction) => Promise<any>;
+function asyncHandler(fn: AsyncHandler) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    fn(req, res, next).catch(next);
+  };
+}
 
-// In-memory store for PoC
-const repos = new Map<string, {
-  ingest: IngestResult;
-  routes: ParsedRoute[];
-}>();
+export const reposRouter = Router();
+reposRouter.use(requireAdminApiKey);
 
 // Ingest a repo (clone + parse routes)
-reposRouter.post('/', async (req: Request, res: Response) => {
+reposRouter.post('/', repoIngestLimiter, validateBody(ingestRepoSchema), async (req: Request, res: Response) => {
   try {
     const { url } = req.body;
-    if (!url || typeof url !== 'string') {
-      return res.status(400).json({ error: 'url is required (GitHub URL or local path)' });
-    }
 
     logger.info({ url }, 'Ingesting repo');
     const ingest = await ingestRepo(url);
-    const routes = await parseRoutes(ingest.expressFiles, ingest.repoPath);
+    const routes = await parseRoutes(ingest.routeFiles, ingest.repoPath);
 
-    repos.set(ingest.repoId, { ingest, routes });
+    await insertRepo(
+      {
+        repoId: ingest.repoId,
+        name: ingest.name,
+        repoPath: ingest.repoPath,
+        routeFiles: ingest.routeFiles,
+        detectedFramework: ingest.detectedFramework,
+      },
+      routes.map((r) => ({
+        method: r.method,
+        path: r.path,
+        handlerCode: r.handlerCode,
+        middlewares: r.middlewares,
+        fileName: r.fileName,
+        lineNumber: r.lineNumber,
+        params: r.params,
+        queryParams: r.queryParams,
+        hasBody: r.hasBody,
+        authType: r.auth.type,
+        authMiddleware: r.auth.middleware,
+        authHeaderName: r.auth.headerName,
+      }))
+    );
 
     res.status(201).json({
       repoId: ingest.repoId,
       name: ingest.name,
-      expressFiles: ingest.expressFiles.length,
-      routes: routes.map(r => ({
+      routeFiles: ingest.routeFiles.length,
+      framework: ingest.detectedFramework,
+      routes: routes.map((r) => ({
         method: r.method,
         path: r.path,
         params: r.params,
@@ -42,34 +69,37 @@ reposRouter.post('/', async (req: Request, res: Response) => {
     });
   } catch (err: any) {
     logger.error({ err }, 'Failed to ingest repo');
-    res.status(500).json({ error: err.message || 'Failed to ingest repo' });
+    const statusCode = err instanceof AppError ? err.statusCode : 500;
+    res.status(statusCode).json({ error: err.message || 'Failed to ingest repo' });
   }
 });
 
 // List ingested repos
-reposRouter.get('/', (_req: Request, res: Response) => {
-  const list = Array.from(repos.entries()).map(([id, data]) => ({
-    repoId: id,
-    name: data.ingest.name,
-    routeCount: data.routes.length,
-    expressFiles: data.ingest.expressFiles.length,
+reposRouter.get('/', asyncHandler(async (_req: Request, res: Response) => {
+  const list = (await listRepos()).map((r) => ({
+    repoId: r.repoId,
+    name: r.name,
+    routeCount: r.routeCount,
+    routeFiles: r.routeFiles.length,
+    framework: r.detectedFramework,
   }));
   res.json(list);
-});
+}));
 
 // Get repo details
-reposRouter.get('/:id', (req: Request, res: Response) => {
+reposRouter.get('/:id', asyncHandler(async (req: Request, res: Response) => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const data = repos.get(id);
+  const data = await getRepo(id);
   if (!data) {
     return res.status(404).json({ error: 'Repo not found' });
   }
   res.json({
-    repoId: id,
-    name: data.ingest.name,
-    repoPath: data.ingest.repoPath,
-    expressFiles: data.ingest.expressFiles,
-    routes: data.routes.map(r => ({
+    repoId: data.repo.repoId,
+    name: data.repo.name,
+    repoPath: data.repo.repoPath,
+    routeFiles: data.repo.routeFiles,
+    framework: data.repo.detectedFramework,
+    routes: data.routes.map((r) => ({
       method: r.method,
       path: r.path,
       params: r.params,
@@ -79,12 +109,11 @@ reposRouter.get('/:id', (req: Request, res: Response) => {
       fileName: r.fileName,
       lineNumber: r.lineNumber,
       handlerCode: r.handlerCode,
-      auth: r.auth,
+      auth: {
+        type: r.authType,
+        middleware: r.authMiddleware || undefined,
+        headerName: r.authHeaderName || undefined,
+      },
     })),
   });
-});
-
-// Export for doc generation access
-export function getRepoData(repoId: string) {
-  return repos.get(repoId);
-}
+}));

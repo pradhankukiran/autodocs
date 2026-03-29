@@ -1,4 +1,4 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { v4 as uuid } from 'uuid';
 import { getRepoData } from '../services/repo-store.js';
 import {
@@ -13,6 +13,13 @@ import { requireAdminApiKey } from '../middleware/admin-auth.js';
 import { validateBody, generateDocsSchema } from '../middleware/validation.js';
 import { docGenerateLimiter } from '../middleware/rate-limit.js';
 import { createQueuedDocJob, requeueDocJob } from '../services/doc-job-runner.js';
+
+type AsyncHandler = (req: Request, res: Response, next: NextFunction) => Promise<any>;
+function asyncHandler(fn: AsyncHandler) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    fn(req, res, next).catch(next);
+  };
+}
 
 export const docsRouter = Router();
 
@@ -79,7 +86,7 @@ function sendEvent(res: Response, data: JobProgressEvent) {
   res.write(`data: ${JSON.stringify(data)}\n\n`);
 }
 
-docsRouter.post('/generate', requireAdminApiKey, docGenerateLimiter, validateBody(generateDocsSchema), async (req: Request, res: Response) => {
+docsRouter.post('/generate', requireAdminApiKey, docGenerateLimiter, validateBody(generateDocsSchema), asyncHandler(async (req: Request, res: Response) => {
   const { repoId, provider, codeTargets, temperature, maxTokens } = req.body;
 
   const repoData = await getRepoData(repoId);
@@ -106,9 +113,9 @@ docsRouter.post('/generate', requireAdminApiKey, docGenerateLimiter, validateBod
   });
 
   return res.status(202).json({ jobId, status: 'pending' });
-});
+}));
 
-docsRouter.post('/resume/:repoId', requireAdminApiKey, docGenerateLimiter, async (req: Request, res: Response) => {
+docsRouter.post('/resume/:repoId', requireAdminApiKey, docGenerateLimiter, asyncHandler(async (req: Request, res: Response) => {
   const repoId = Array.isArray(req.params.repoId) ? req.params.repoId[0] : req.params.repoId;
 
   const repoData = await getRepoData(repoId);
@@ -132,9 +139,9 @@ docsRouter.post('/resume/:repoId', requireAdminApiKey, docGenerateLimiter, async
 
   await requeueDocJob(latestJob.id, repoData.routes.length, latestJob.progress);
   return res.status(202).json({ jobId: latestJob.id, status: 'pending' });
-});
+}));
 
-docsRouter.get('/jobs/repo/:repoId/latest', requireAdminApiKey, async (req: Request, res: Response) => {
+docsRouter.get('/jobs/repo/:repoId/latest', requireAdminApiKey, asyncHandler(async (req: Request, res: Response) => {
   const repoId = Array.isArray(req.params.repoId) ? req.params.repoId[0] : req.params.repoId;
   const job = await getLatestJobByRepoId(repoId);
 
@@ -143,9 +150,9 @@ docsRouter.get('/jobs/repo/:repoId/latest', requireAdminApiKey, async (req: Requ
   }
 
   return res.json(serializeJob(job));
-});
+}));
 
-docsRouter.get('/jobs/:jobId', requireAdminApiKey, async (req: Request, res: Response) => {
+docsRouter.get('/jobs/:jobId', requireAdminApiKey, asyncHandler(async (req: Request, res: Response) => {
   const jobId = Array.isArray(req.params.jobId) ? req.params.jobId[0] : req.params.jobId;
   const job = await getJob(jobId);
 
@@ -154,9 +161,9 @@ docsRouter.get('/jobs/:jobId', requireAdminApiKey, async (req: Request, res: Res
   }
 
   return res.json(serializeJob(job));
-});
+}));
 
-docsRouter.get('/jobs/:jobId/events', requireAdminApiKey, async (req: Request, res: Response) => {
+docsRouter.get('/jobs/:jobId/events', requireAdminApiKey, asyncHandler(async (req: Request, res: Response) => {
   const jobId = Array.isArray(req.params.jobId) ? req.params.jobId[0] : req.params.jobId;
 
   res.writeHead(200, {
@@ -200,9 +207,9 @@ docsRouter.get('/jobs/:jobId/events', requireAdminApiKey, async (req: Request, r
   }
 
   res.end();
-});
+}));
 
-docsRouter.get('/openapi/:repoId', requireAdminApiKey, async (req: Request, res: Response) => {
+docsRouter.get('/openapi/:repoId', requireAdminApiKey, asyncHandler(async (req: Request, res: Response) => {
   const repoId = Array.isArray(req.params.repoId) ? req.params.repoId[0] : req.params.repoId;
   const spec = await getOpenApiSpec(repoId);
   if (!spec) {
@@ -210,4 +217,4 @@ docsRouter.get('/openapi/:repoId', requireAdminApiKey, async (req: Request, res:
   }
 
   res.json(spec);
-});
+}));
