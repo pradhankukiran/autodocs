@@ -28,7 +28,7 @@ async function getClient(providerName: string, settings?: Record<string, any>): 
       throw new Error(`Provider ${providerName} not configured`);
     }
 
-    clients.set(providerName, new OpenAI({ baseURL, apiKey }));
+    clients.set(providerName, new OpenAI({ baseURL, apiKey, timeout: 120_000 }));
   }
   return clients.get(providerName)!;
 }
