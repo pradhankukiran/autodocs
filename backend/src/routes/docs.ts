@@ -1,97 +1,213 @@
 import { Router, Request, Response } from 'express';
-import { getRepoData } from './repos.js';
-import { generateDocs, GenerationProgress, GenerationOptions } from '../services/doc-generator.js';
-import { CodeTargetKey, CODE_TARGETS } from '../prompts/code-examples.js';
-import { logger } from '../utils/logger.js';
+import { v4 as uuid } from 'uuid';
+import { getRepoData } from '../services/repo-store.js';
+import {
+  getActiveJobByRepoId,
+  getJob,
+  getLatestJobByRepoId,
+  getOpenApiSpec,
+  GenerationJobRow,
+  JobProgressEvent,
+} from '../services/db.js';
+import { requireAdminApiKey } from '../middleware/admin-auth.js';
+import { validateBody, generateDocsSchema } from '../middleware/validation.js';
+import { docGenerateLimiter } from '../middleware/rate-limit.js';
+import { createQueuedDocJob, requeueDocJob } from '../services/doc-job-runner.js';
 
 export const docsRouter = Router();
 
-// Store generated OpenAPI specs in memory
-const openApiSpecs = new Map<string, object>();
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
-// Trigger doc generation (returns SSE stream)
-docsRouter.post('/generate', async (req: Request, res: Response) => {
-  const { repoId, provider, codeTargets } = req.body;
-
-  if (!repoId) {
-    return res.status(400).json({ error: 'repoId is required' });
+function buildProgressFromJob(job: GenerationJobRow): JobProgressEvent {
+  if (job.lastEvent) {
+    return job.lastEvent;
   }
 
-  const repoData = getRepoData(repoId);
+  if (job.status === 'completed') {
+    return {
+      step: 'complete',
+      progress: 100,
+      message: 'Documentation generated successfully!',
+      failedEndpoints: job.failedEndpoints.map(({ endpoint, error }) => ({ endpoint, error })),
+    };
+  }
+
+  if (job.status === 'failed') {
+    return {
+      step: 'error',
+      progress: job.progress,
+      message: job.errorMessage || 'Generation failed',
+    };
+  }
+
+  if (job.status === 'pending') {
+    return {
+      step: 'queued',
+      progress: job.progress,
+      message: 'Queued for generation',
+      total: job.totalEndpoints,
+    };
+  }
+
+  return {
+    step: 'generating',
+    progress: job.progress,
+    message: 'Generation in progress',
+    total: job.totalEndpoints,
+  };
+}
+
+function serializeJob(job: GenerationJobRow) {
+  return {
+    id: job.id,
+    repoId: job.repoId,
+    status: job.status,
+    provider: job.provider,
+    progress: job.progress,
+    totalEndpoints: job.totalEndpoints,
+    errorMessage: job.errorMessage,
+    createdAt: job.createdAt,
+    updatedAt: job.updatedAt,
+    lastEvent: buildProgressFromJob(job),
+  };
+}
+
+function sendEvent(res: Response, data: JobProgressEvent) {
+  res.write(`event: ${data.step}\n`);
+  res.write(`data: ${JSON.stringify(data)}\n\n`);
+}
+
+docsRouter.post('/generate', requireAdminApiKey, docGenerateLimiter, validateBody(generateDocsSchema), async (req: Request, res: Response) => {
+  const { repoId, provider, codeTargets, temperature, maxTokens } = req.body;
+
+  const repoData = await getRepoData(repoId);
   if (!repoData) {
     return res.status(404).json({ error: 'Repo not found. Ingest it first via POST /api/repos' });
   }
 
-  const validProviders = ['cerebras', 'groq', 'openrouter'];
-  if (provider && !validProviders.includes(provider)) {
-    return res.status(400).json({ error: `Invalid provider: ${provider}. Valid: ${validProviders.join(', ')}` });
+  const activeJob = await getActiveJobByRepoId(repoId);
+  if (activeJob) {
+    return res.status(409).json({ error: 'Generation already in progress for this repo', jobId: activeJob.id });
   }
 
-  // Validate codeTargets if provided
-  const validCodeTargets = Object.keys(CODE_TARGETS);
-  if (codeTargets && Array.isArray(codeTargets)) {
-    const invalid = codeTargets.filter((t: string) => !validCodeTargets.includes(t));
-    if (invalid.length > 0) {
-      return res.status(400).json({
-        error: `Invalid code targets: ${invalid.join(', ')}`,
-        validTargets: validCodeTargets,
-      });
-    }
-  }
-
-  const generationOptions: GenerationOptions = {
+  const jobId = uuid();
+  await createQueuedDocJob({
+    id: jobId,
+    repoId,
     provider: provider || 'cerebras',
-    codeTargets: codeTargets as CodeTargetKey[] | undefined,
-  };
+    totalEndpoints: repoData.routes.length,
+    options: {
+      codeTargets,
+      temperature,
+      maxTokens,
+    },
+  });
 
-  // Set up SSE
+  return res.status(202).json({ jobId, status: 'pending' });
+});
+
+docsRouter.post('/resume/:repoId', requireAdminApiKey, docGenerateLimiter, async (req: Request, res: Response) => {
+  const repoId = Array.isArray(req.params.repoId) ? req.params.repoId[0] : req.params.repoId;
+
+  const repoData = await getRepoData(repoId);
+  if (!repoData) {
+    return res.status(404).json({ error: 'Repo not found' });
+  }
+
+  const activeJob = await getActiveJobByRepoId(repoId);
+  if (activeJob) {
+    return res.status(409).json({ error: 'Generation already in progress', jobId: activeJob.id });
+  }
+
+  const latestJob = await getLatestJobByRepoId(repoId);
+  if (!latestJob) {
+    return res.status(404).json({ error: 'No previous generation job found' });
+  }
+
+  if (latestJob.status !== 'failed') {
+    return res.status(400).json({ error: `Cannot resume job with status: ${latestJob.status}` });
+  }
+
+  await requeueDocJob(latestJob.id, repoData.routes.length, latestJob.progress);
+  return res.status(202).json({ jobId: latestJob.id, status: 'pending' });
+});
+
+docsRouter.get('/jobs/repo/:repoId/latest', requireAdminApiKey, async (req: Request, res: Response) => {
+  const repoId = Array.isArray(req.params.repoId) ? req.params.repoId[0] : req.params.repoId;
+  const job = await getLatestJobByRepoId(repoId);
+
+  if (!job) {
+    return res.status(404).json({ error: 'No generation job found for this repo' });
+  }
+
+  return res.json(serializeJob(job));
+});
+
+docsRouter.get('/jobs/:jobId', requireAdminApiKey, async (req: Request, res: Response) => {
+  const jobId = Array.isArray(req.params.jobId) ? req.params.jobId[0] : req.params.jobId;
+  const job = await getJob(jobId);
+
+  if (!job) {
+    return res.status(404).json({ error: 'Generation job not found' });
+  }
+
+  return res.json(serializeJob(job));
+});
+
+docsRouter.get('/jobs/:jobId/events', requireAdminApiKey, async (req: Request, res: Response) => {
+  const jobId = Array.isArray(req.params.jobId) ? req.params.jobId[0] : req.params.jobId;
+
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache',
-    'Connection': 'keep-alive',
+    Connection: 'keep-alive',
     'X-Accel-Buffering': 'no',
   });
 
-  const sendEvent = (data: GenerationProgress) => {
-    res.write(`event: ${data.step}\n`);
-    res.write(`data: ${JSON.stringify(data)}\n\n`);
-  };
+  let closed = false;
+  req.on('close', () => {
+    closed = true;
+  });
 
-  try {
-    sendEvent({
-      step: 'parsing',
-      progress: 5,
-      message: `Found ${repoData.routes.length} routes in ${repoData.ingest.expressFiles.length} files`,
-    });
+  let lastCursor = '';
 
-    const { openApiSpec, pagesCreated } = await generateDocs(
-      repoData.ingest.name,
-      repoData.routes,
-      repoId,
-      generationOptions,
-      sendEvent
-    );
+  while (!closed) {
+    const job = await getJob(jobId);
+    if (!job) {
+      sendEvent(res, {
+        step: 'error',
+        progress: 0,
+        message: 'Generation job not found',
+      });
+      break;
+    }
 
-    // Store the spec
-    openApiSpecs.set(repoId, openApiSpec);
-  } catch (err: any) {
-    logger.error({ err }, 'Doc generation failed');
-    sendEvent({
-      step: 'error',
-      progress: 0,
-      message: err.message || 'Generation failed',
-    });
+    const event = buildProgressFromJob(job);
+    const cursor = `${job.updatedAt}:${job.status}:${JSON.stringify(event)}`;
+
+    if (cursor !== lastCursor) {
+      sendEvent(res, event);
+      lastCursor = cursor;
+    }
+
+    if (job.status === 'completed' || job.status === 'failed') {
+      break;
+    }
+
+    await sleep(1000);
   }
 
   res.end();
 });
 
-// Get OpenAPI spec for a repo (used by Scalar playground)
-docsRouter.get('/openapi/:repoId', (req: Request, res: Response) => {
+docsRouter.get('/openapi/:repoId', requireAdminApiKey, async (req: Request, res: Response) => {
   const repoId = Array.isArray(req.params.repoId) ? req.params.repoId[0] : req.params.repoId;
-  const spec = openApiSpecs.get(repoId);
+  const spec = await getOpenApiSpec(repoId);
   if (!spec) {
     return res.status(404).json({ error: 'OpenAPI spec not found. Generate docs first.' });
   }
+
   res.json(spec);
 });
