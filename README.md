@@ -18,16 +18,23 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/pradhankukiran/autodocs/actions"><img src="https://img.shields.io/github/actions/workflow/status/pradhankukiran/autodocs/ci.yml?branch=main&style=flat-square&logo=github&label=CI" alt="CI"></a>
   <a href="https://github.com/pradhankukiran/autodocs/blob/main/LICENSE"><img src="https://img.shields.io/github/license/pradhankukiran/autodocs?style=flat-square&color=blue" alt="License"></a>
-  <a href="https://github.com/pradhankukiran/autodocs/releases"><img src="https://img.shields.io/github/v/release/pradhankukiran/autodocs?style=flat-square&color=green" alt="Release"></a>
-  <img src="https://img.shields.io/badge/node-%3E%3D18-brightgreen?style=flat-square&logo=node.js" alt="Node">
-  <img src="https://img.shields.io/badge/TypeScript-5.7-blue?style=flat-square&logo=typescript" alt="TypeScript">
-  <img src="https://img.shields.io/badge/Express-5-000000?style=flat-square&logo=express" alt="Express">
-  <img src="https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react" alt="React">
-  <img src="https://img.shields.io/badge/Docker-Ready-2496ED?style=flat-square&logo=docker" alt="Docker">
   <a href="https://github.com/pradhankukiran/autodocs/issues"><img src="https://img.shields.io/github/issues/pradhankukiran/autodocs?style=flat-square" alt="Issues"></a>
   <a href="https://github.com/pradhankukiran/autodocs/stargazers"><img src="https://img.shields.io/github/stars/pradhankukiran/autodocs?style=flat-square" alt="Stars"></a>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Node.js-%3E%3D18-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node.js">
+  <img src="https://img.shields.io/badge/TypeScript-5.7-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript">
+  <img src="https://img.shields.io/badge/Express-5-000000?style=flat-square&logo=express&logoColor=white" alt="Express">
+  <img src="https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black" alt="React">
+  <img src="https://img.shields.io/badge/Tailwind_CSS-4-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white" alt="Tailwind CSS">
+  <img src="https://img.shields.io/badge/PostgreSQL-15-4169E1?style=flat-square&logo=postgresql&logoColor=white" alt="PostgreSQL">
+  <img src="https://img.shields.io/badge/SQLite-3-003B57?style=flat-square&logo=sqlite&logoColor=white" alt="SQLite">
+  <img src="https://img.shields.io/badge/Docker-Compose-2496ED?style=flat-square&logo=docker&logoColor=white" alt="Docker">
+  <img src="https://img.shields.io/badge/OpenAI_SDK-4-412991?style=flat-square&logo=openai&logoColor=white" alt="OpenAI SDK">
+  <img src="https://img.shields.io/badge/Vite-6-646CFF?style=flat-square&logo=vite&logoColor=white" alt="Vite">
+  <img src="https://img.shields.io/badge/Zod-3-3E67B1?style=flat-square&logo=zod&logoColor=white" alt="Zod">
 </p>
 
 ---
