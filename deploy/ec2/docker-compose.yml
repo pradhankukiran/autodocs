@@ -6,8 +6,12 @@ services:
       POSTGRES_DB: wikijs
       POSTGRES_USER: wikijs
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      AUTODOCS_DB_NAME: ${AUTODOCS_DB_NAME:-autodocs}
+      AUTODOCS_DB_USER: ${AUTODOCS_DB_USER:-autodocs}
+      AUTODOCS_DB_PASSWORD: ${AUTODOCS_DB_PASSWORD}
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ../../docker/postgres/init/01-create-autodocs-db.sh:/docker-entrypoint-initdb.d/01-create-autodocs-db.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U wikijs"]
       interval: 10s
@@ -27,14 +31,22 @@ services:
       DB_USER: wikijs
       DB_PASS: ${POSTGRES_PASSWORD}
       DB_NAME: wikijs
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:3000/healthz || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
   backend:
     build:
       context: ../../backend
       dockerfile: Dockerfile
+    command: ["npm", "run", "start:server"]
     restart: unless-stopped
     depends_on:
-      - wiki
+      wiki:
+        condition: service_healthy
     environment:
       NODE_ENV: production
       PORT: 4000
@@ -42,10 +54,39 @@ services:
       FRONTEND_URL: ${FRONTEND_URL}
       WIKI_API_TOKEN: ${WIKI_API_TOKEN}
       CORS_ORIGINS: ${CORS_ORIGINS}
+      APP_DATABASE_URL: postgresql://${AUTODOCS_DB_USER:-autodocs}:${AUTODOCS_DB_PASSWORD}@db:5432/${AUTODOCS_DB_NAME:-autodocs}
+      APP_DATABASE_SSL: ${APP_DATABASE_SSL:-false}
       CEREBRAS_API_KEY: ${CEREBRAS_API_KEY}
       GROQ_API_KEY: ${GROQ_API_KEY}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
       DEFAULT_LLM_PROVIDER: ${DEFAULT_LLM_PROVIDER:-cerebras}
+      DOC_JOB_POLL_INTERVAL_MS: ${DOC_JOB_POLL_INTERVAL_MS:-1000}
+      REPOS_DIR: /data/repos
+    volumes:
+      - backend_repos:/data/repos
+
+  worker:
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile
+    command: ["npm", "run", "start:worker"]
+    restart: unless-stopped
+    depends_on:
+      wiki:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      WIKI_URL: http://wiki:3000
+      FRONTEND_URL: ${FRONTEND_URL}
+      WIKI_API_TOKEN: ${WIKI_API_TOKEN}
+      CORS_ORIGINS: ${CORS_ORIGINS}
+      APP_DATABASE_URL: postgresql://${AUTODOCS_DB_USER:-autodocs}:${AUTODOCS_DB_PASSWORD}@db:5432/${AUTODOCS_DB_NAME:-autodocs}
+      APP_DATABASE_SSL: ${APP_DATABASE_SSL:-false}
+      CEREBRAS_API_KEY: ${CEREBRAS_API_KEY}
+      GROQ_API_KEY: ${GROQ_API_KEY}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      DEFAULT_LLM_PROVIDER: ${DEFAULT_LLM_PROVIDER:-cerebras}
+      DOC_JOB_POLL_INTERVAL_MS: ${DOC_JOB_POLL_INTERVAL_MS:-1000}
       REPOS_DIR: /data/repos
     volumes:
       - backend_repos:/data/repos
