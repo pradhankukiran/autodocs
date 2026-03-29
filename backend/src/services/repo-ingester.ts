@@ -4,14 +4,41 @@ import fs from 'fs/promises';
 import path from 'path';
 import { v4 as uuid } from 'uuid';
 import { config } from '../config.js';
+import { AppError } from '../errors.js';
 import { logger } from '../utils/logger.js';
+import type { FrameworkType } from './parsers/index.js';
 
 export interface IngestResult {
   repoId: string;
   repoPath: string;
   name: string;
-  expressFiles: string[];
+  routeFiles: string[];
+  detectedFramework: FrameworkType;
 }
+
+const FRAMEWORK_PATTERNS: Array<{ framework: FrameworkType; patterns: string[] }> = [
+  {
+    framework: 'express',
+    patterns: [
+      "from 'express'", 'from "express"',
+      "require('express')", 'require("express")',
+    ],
+  },
+  {
+    framework: 'fastify',
+    patterns: [
+      "from 'fastify'", 'from "fastify"',
+      "require('fastify')", 'require("fastify")',
+    ],
+  },
+  {
+    framework: 'koa',
+    patterns: [
+      "'koa-router'", '"koa-router"',
+      "'@koa/router'", '"@koa/router"',
+    ],
+  },
+];
 
 function isGitUrl(input: string): boolean {
   return input.startsWith('http://') || input.startsWith('https://') || input.startsWith('git@');
@@ -38,7 +65,13 @@ export async function ingestRepo(input: string): Promise<IngestResult> {
     const git = simpleGit();
     await git.clone(input, repoPath, ['--depth', '1']);
   } else {
-    // Local path — validate it exists
+    if (!config.allowLocalRepoPaths) {
+      throw new AppError(
+        'Local filesystem repo ingestion is disabled. Set ALLOW_LOCAL_REPO_PATHS=true to enable it.',
+        403
+      );
+    }
+
     const stats = await fs.stat(input);
     if (!stats.isDirectory()) {
       throw new Error(`Path is not a directory: ${input}`);
@@ -47,32 +80,44 @@ export async function ingestRepo(input: string): Promise<IngestResult> {
     logger.info({ input }, 'Using local path');
   }
 
-  // Find files that reference Express
   const allFiles = await fg(['**/*.{ts,js,mjs}'], {
     cwd: repoPath,
     ignore: ['**/node_modules/**', '**/dist/**', '**/build/**', '**/.next/**'],
     absolute: true,
   });
 
-  const expressFiles: string[] = [];
+  const routeFiles: string[] = [];
+  let detectedFramework: FrameworkType = 'unknown';
+  const frameworkCounts = new Map<FrameworkType, number>();
+
   for (const file of allFiles) {
     const content = await fs.readFile(file, 'utf-8');
-    if (
-      content.includes("from 'express'") ||
-      content.includes('from "express"') ||
-      content.includes("require('express')") ||
-      content.includes('require("express")')
-    ) {
-      expressFiles.push(file);
+
+    for (const { framework, patterns } of FRAMEWORK_PATTERNS) {
+      if (patterns.some((p) => content.includes(p))) {
+        routeFiles.push(file);
+        frameworkCounts.set(framework, (frameworkCounts.get(framework) || 0) + 1);
+        break;
+      }
     }
   }
 
-  logger.info({ count: expressFiles.length }, 'Found Express files');
+  // Use the most common framework
+  let maxCount = 0;
+  for (const [fw, count] of frameworkCounts) {
+    if (count > maxCount) {
+      maxCount = count;
+      detectedFramework = fw;
+    }
+  }
+
+  logger.info({ count: routeFiles.length, framework: detectedFramework }, 'Found route files');
 
   return {
     repoId,
     repoPath,
     name: extractName(input),
-    expressFiles,
+    routeFiles,
+    detectedFramework,
   };
 }
