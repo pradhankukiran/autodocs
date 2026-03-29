@@ -59,8 +59,3 @@ providersRouter.get('/llm-config', asyncHandler(async (_req: Request, res: Respo
     providers: await getAvailableProviders(),
   });
 }));
-
-// Helper for other modules
-export async function getSettings(): Promise<Record<string, any>> {
-  return getAllSettings();
-}
