@@ -25,6 +25,10 @@ export const CODE_EXAMPLES_SYSTEM_PROMPT = `You are an expert developer who writ
 - Are concise with no unnecessary comments
 - Follow each language's conventions and best practices`;
 
+function sanitize(input: string): string {
+  return input.replace(/[`${}\\]/g, '');
+}
+
 export function buildCodeExamplesPrompt(route: {
   method: string;
   path: string;
@@ -32,18 +36,19 @@ export function buildCodeExamplesPrompt(route: {
   queryParams: string[];
   hasBody: boolean;
   auth?: { type: string; headerName?: string };
-}, targets: CodeTargetKey[]): string {
+}, targets: CodeTargetKey[], options?: { baseUrl?: string }): string {
+  const baseUrl = sanitize(options?.baseUrl || '{{API_BASE_URL}}');
   const targetDescriptions = targets.map(key => {
     const target = CODE_TARGETS[key];
     return `- **${target.label}**: language=${target.language}, library=${target.library}`;
   }).join('\n');
 
   const paramInfo = route.params.length > 0
-    ? `Path parameters: ${route.params.join(', ')}`
+    ? `Path parameters: ${route.params.map(p => sanitize(p)).join(', ')}`
     : 'No path parameters';
 
   const queryInfo = route.queryParams.length > 0
-    ? `Query parameters: ${route.queryParams.join(', ')}`
+    ? `Query parameters: ${route.queryParams.map(p => sanitize(p)).join(', ')}`
     : 'No query parameters';
 
   const bodyInfo = route.hasBody
@@ -55,14 +60,14 @@ export function buildCodeExamplesPrompt(route: {
 ## Endpoint
 - **Method**: ${route.method}
 - **Path**: ${route.path}
-- **Base URL**: http://localhost:3000
+- **Base URL**: ${baseUrl}
 - ${paramInfo}
 - ${queryInfo}
 - ${bodyInfo}
 
 ## Authentication
 ${route.auth && route.auth.type !== 'none'
-  ? `- Type: ${route.auth.type}\n- Header: ${route.auth.headerName || 'Authorization'}\nInclude the appropriate authentication header in each example.`
+  ? `- Type: ${sanitize(route.auth.type)}\n- Header: ${sanitize(route.auth.headerName || 'Authorization')}\nInclude the appropriate authentication header in each example.`
   : 'No authentication required.'}
 
 ## Requested Code Examples
